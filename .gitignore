@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Build artifacts produced by the tool
+*.glb
+*.blend
+*.blend1
+*_preview/
+
+# Source assets (Mixamo FBX exports are not ours to redistribute)
+*.fbx
+
+# Local development notes - never published
+*.local.md
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

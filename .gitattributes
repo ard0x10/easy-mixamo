@@ -1,0 +1,18 @@
+# Normalize text files in the repository, check them out per platform.
+* text=auto
+
+# Shell scripts must keep LF or they will not run on macOS/Linux.
+*.sh text eol=lf
+
+# Batch files need CRLF for cmd.exe.
+*.bat text eol=crlf
+
+*.py   text
+*.md   text
+*.json text
+
+# Binary assets
+*.fbx  binary
+*.glb  binary
+*.blend binary
+*.png  binary
