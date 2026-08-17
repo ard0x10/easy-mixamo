@@ -1,44 +1,74 @@
 # easy-mixamo
 
-Turn a folder of Mixamo FBX downloads into one `.glb` file that drops straight into
-Godot, with every animation intact and nothing twisted.
+**Mixamo animations into Godot without opening Blender.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-orange)
 ![Godot 4](https://img.shields.io/badge/Godot-4.x-blue)
 
-| Merged the obvious way | Merged with easy-mixamo |
-|---|---|
-| ![Twisted arm](docs/images/arm-twisted.png) | ![Correct arm](docs/images/arm-correct.png) |
+Mixamo hands you the character and every animation as a **separate FBX**. Godot wants the
+opposite: **one file** with the character and all of its animations inside. Bridging that
+gap by hand is a Blender session per character - import each file, find the one holding the
+mesh, get every animation onto a single skeleton, rename all the bones, fix the scale,
+export, check the result - and you do it again every time you add another animation.
 
-Same character, same animation, same frame. On the left, the animation was moved onto the
-character the way most scripts and tutorials do it. On the right, the same animation after
-going through this tool.
+This tool does the whole thing for you, in one command:
+
+```bash
+python easymixamo.py all --src D:\GameProject\assets\hero --target-height 1.75
+```
+
+A folder of Mixamo downloads goes in. One `Character.glb` comes out: mesh, texture and
+every animation, bones named the way Godot needs them, scaled to human size, and checked
+frame by frame against the originals before anything is written. Drop it into your Godot
+project and it plays.
+
+Blender does the heavy lifting in the background - you never have to open it, and you do
+not need to know it.
+
+There is a window too, if you would rather click than type - same steps, same output, with
+the finished animations rendered out for you to check:
+
+![The app](docs/images/gui-preview.png)
 
 ---
 
-## What problem does this solve?
+## What it does for you
 
-Mixamo gives you **separate files**. You download the character once (with its mesh and
-texture), then you download each animation on its own. Godot wants the opposite: **one
-file** containing the character and all of its animations.
-
-Merging them sounds easy, and that is the trap. The files do not agree on the character's
-**rest pose** - the neutral pose every animation is measured against. Blender stores
-animation as *changes relative to rest*, so if you simply move an animation from one file
-to another, the difference between the two rest poses is silently added to every frame.
-
-The damage is not obvious. The legs and torso still look roughly right; the **arms and
-hands come out inverted, twisted or shattered**. You glance at a preview, it looks fine,
-and you find out much later in the game.
-
-| The obvious way | easy-mixamo |
+| By hand, in Blender | With easy-mixamo |
 |---|---|
-| ![Twisted pose](docs/images/pose-twisted.png) | ![Correct pose](docs/images/pose-correct.png) |
+| Import the skinned character and every animation FBX one at a time | Point at the folder |
+| Work out which file actually holds the mesh | Detected for you |
+| Get every animation onto one skeleton without breaking it | Done, and verified |
+| Strip the `mixamorig:` prefix, because `:` separates node paths in Godot | Automatic |
+| Scale a ~4.6 m Mixamo character down to human size | `--target-height 1.75` |
+| Strip horizontal motion from the animations you drive from code | `--in-place Walking` |
+| Export GLB with the right settings and hope | Exported, then re-read and checked |
+| Find out in Godot that something is wrong | Rendered stills to look at first |
+| Do all of it again next month for the next animation | Re-run one command |
 
-This tool never copies animation data across. It watches where every bone actually is in
-world space, frame by frame, then poses the target skeleton to land in the same places. It
-does not care whether the rest poses agree.
+Nothing is written unless the rebuilt animation matches the source within the tolerance -
+by default **0.1 mm**, on every bone of every frame.
+
+### The part that quietly goes wrong
+
+Most of the merge is tedious rather than difficult. One part is genuinely difficult, and it
+is the reason this tool re-solves the animation instead of copying it.
+
+The files do not always agree on the character's **rest pose** - the neutral pose every
+animation is measured against. Blender stores animation as *changes relative to rest*, so
+moving an action from one file to another silently adds the difference between the two rest
+poses to every frame. The legs and torso still look plausible; the arms and hands twist.
+
+| Channels copied across | Re-solved by easy-mixamo |
+|---|---|
+| ![Twisted arm](docs/images/arm-twisted.png) | ![Correct arm](docs/images/arm-correct.png) |
+
+Plenty of Mixamo sets merge cleanly and never show this. The problem is that you cannot
+tell which kind you have by looking, and when it does happen you usually notice long after
+import. So this tool never copies animation data across at all: it watches where every bone
+actually is in world space, frame by frame, then poses the target skeleton to land in the
+same places. Whether the rest poses agree stops mattering.
 
 In the example above the two files' rest poses were **3.54 m** apart. After rebuilding,
 every bone on every frame lands within **0.007 mm** of the original.
@@ -147,7 +177,8 @@ setting is the height.
 
 - **Fixed height** - Mixamo characters are around 4.6 m tall in Blender units. Set 1.75
   and the character comes out human-sized, which saves you fighting scale in Godot.
-- **Rest pose** - leave it on *auto*. This is the setting that fixes the twisted arms.
+- **Rest pose** - leave it on *auto*. This is what makes the animations and the skeleton
+  agree; see [What `--rest` actually does](#what---rest-actually-does).
 - **Tolerance** - how far a bone is allowed to drift before the build is rejected. The
   default is 0.1 mm.
 
@@ -156,11 +187,9 @@ Blender's output streams into the right-hand panel as it happens, in green when 
 passes and in red when it does not. Nothing is written unless the result passes
 verification.
 
-![The Preview tab](docs/images/gui-preview.png)
-
-When it finishes you land on the **Preview** tab: rendered stills of the rest pose and of
-every animation. Look at them. A rest pose problem is visible here in a second and would
-cost you an hour in Godot.
+When it finishes you land on the **Preview** tab - the screenshot at the top of this page -
+holding rendered stills of the rest pose and of every animation. Look at them. Anything
+that went wrong is visible here in a second and would cost you an hour in Godot.
 
 The line along the bottom always shows the exact command that will run, so you can copy it
 into a terminal any time you want to script the same build.
@@ -273,10 +302,14 @@ file name is used.
 
 ### What `--rest` actually does
 
-The skinned file's bind pose usually does not face the same way as the animations. `--rest
+The skinned file's bind pose often does not face the same way as the animations. `--rest
 auto` rebinds the mesh onto the pose the animations were authored against, which means
 Skeleton3D faces the right way, BoneAttachment3D behaves, and Godot's humanoid retargeting
 works. Use `--rest bind` only if you specifically need the original bind pose left alone.
+
+| Same animation, channels copied across | Rebuilt with `--rest auto` |
+|---|---|
+| ![Twisted pose](docs/images/pose-twisted.png) | ![Correct pose](docs/images/pose-correct.png) |
 
 ---
 
@@ -333,8 +366,8 @@ in a clean scene, as a second opinion.
 Every one of these caused a real bug here. If you are writing something similar, this is
 the part worth reading.
 
-1. **Rest pose mismatch.** The whole reason this tool exists. Matching bone *names* is not
-   enough; the rest *poses* have to be compared too.
+1. **Rest pose mismatch.** The reason this tool re-solves poses instead of copying
+   channels. Matching bone *names* is not enough; the rest *poses* have to be compared too.
 
 2. **Captured matrices carry the object scale.** The 3x3 part of `arm.matrix_world @
    pb.matrix` has the FBX's 0.01 unit scale baked in, and it is not cancelled when the
