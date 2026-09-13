@@ -421,3 +421,6 @@ valuable part of this repository.
 
 [MIT](LICENSE). Mixamo assets belong to Adobe and are covered by Adobe's terms; this
 repository contains none of them.
+
+The app icon includes the Godot logo by Andrea Calabró, used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

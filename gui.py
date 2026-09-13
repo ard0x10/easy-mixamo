@@ -84,6 +84,35 @@ def enable_dpi_awareness():
         return 1.0
 
 
+def set_app_id():
+    """Give the process its own taskbar identity on Windows. Without it a window started
+    by pythonw.exe is grouped under Python and the taskbar shows Python's icon."""
+    if os.name != "nt":
+        return
+    import ctypes
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_NAME)
+    except Exception:
+        pass
+
+
+def set_app_icon(root):
+    """Window icon. The app starts with the default icon if the files are missing.
+    On Windows the default= form only reaches windows created later, so the root window
+    gets the icon set directly as well."""
+    ico = os.path.join(APP_DIR, "icon.ico")
+    png = os.path.join(APP_DIR, "icon.png")
+    try:
+        if os.name == "nt" and os.path.isfile(ico):
+            root.iconbitmap(default=ico)
+            root.iconbitmap(ico)
+        elif os.path.isfile(png):
+            root.icon_image = tk.PhotoImage(file=png)
+            root.iconphoto(True, root.icon_image)
+    except tk.TclError:
+        pass
+
+
 def pick_font(root, prefer, fallback):
     available = {f.lower() for f in tkfont.families(root)}
     for name in prefer:
@@ -242,6 +271,7 @@ class App(tk.Tk):
         super().__init__()
         self.cfg = load_cfg()
         self.title("easy-mixamo - Mixamo FBX to Godot GLB")
+        set_app_icon(self)
         self.tk.call("tk", "scaling", 96.0 * DPI / 72.0)
         self.geometry(self.cfg.get("geometry", f"{int(1180 * DPI)}x{int(800 * DPI)}"))
         self.minsize(int(1020 * DPI), int(660 * DPI))
@@ -1139,6 +1169,7 @@ class App(tk.Tk):
 def main():
     global DPI
     DPI = enable_dpi_awareness()
+    set_app_id()
     missing = [s for s in SCRIPTS.values() if not os.path.isfile(os.path.join(APP_DIR, s))]
     app = App()
     if missing:
