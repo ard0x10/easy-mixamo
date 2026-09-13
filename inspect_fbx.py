@@ -3,10 +3,9 @@ Pre-flight check: look at a folder of FBX files before building.
 
   blender --factory-startup -b --python inspect_fbx.py -- --src <folder>
 
-The important part of the output is the REST POSE COMPARISON table. If the skinned file
-and the animation files have different rest poses (very common with Mixamo), copying
-actions across would twist the arms and hands. build_character.py already handles that
-correctly; this script exists so you can see what you are dealing with beforehand.
+Shows which file holds the mesh, whether every animation comes from the same character,
+and how the rest poses of the files compare, so you can see what you are dealing with
+before build_character.py writes anything.
 """
 
 import bpy, os, sys, argparse
@@ -151,7 +150,7 @@ def main():
         log(f"  {f:24s} max diff {worst*100:.3f}% ({wb})  {ok}")
 
     log(f"\nREST POSE (reference: '{base}')  -> can actions be moved across directly?")
-    log("  (if the gap is large, NEVER copy channels; build_character.py solves in world space)")
+    log("  (information only; build_character.py solves every pose in world space)")
     for f in rigged:
         if f == base:
             continue
@@ -164,7 +163,7 @@ def main():
         if worst < 1e-4:
             verdict = "SAME - copying channels would have been safe too"
         else:
-            verdict = "DIFFERENT -> copying channels would twist the arms and hands"
+            verdict = "DIFFERENT -> do not copy channels across; the build handles this"
         log(f"  {f:24s} max diff {worst:8.4f} m ({wb})  {verdict}")
 
     fps = {d["fps"] for d in data.values()}

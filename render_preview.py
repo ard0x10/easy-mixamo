@@ -4,8 +4,6 @@ Render preview stills from a GLB, so you can check the result with your own eyes
   blender --factory-startup -b --python render_preview.py -- --glb <file.glb> --out <folder>
 
 Produces the rest pose, a few frames from every animation, and a close-up of a hand.
-The rest pose shot and the hand close-up matter most: a rest pose mismatch shows up
-there before anywhere else.
 """
 
 import bpy, os, sys, math, argparse
@@ -141,7 +139,7 @@ def main():
             aim(c, dist, 0.12)
             shoot(f"{safe(act.name)}_{f:04d}.png", args.res, int(args.res * 1.3))
 
-    # hand close-up - a rest pose mismatch shows up here first
+    # hand close-up
     hand = args.hand_bone
     if hand is None:
         hand = next((b.name for b in arm.data.bones if "hand" in b.name.lower()

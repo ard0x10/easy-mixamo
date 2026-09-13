@@ -7,10 +7,11 @@
 ![Godot 4](https://img.shields.io/badge/Godot-4.x-blue)
 
 Mixamo hands you the character and every animation as a **separate FBX**. Godot wants the
-opposite: **one file** with the character and all of its animations inside. Bridging that
-gap by hand is a Blender session per character - import each file, find the one holding the
-mesh, get every animation onto a single skeleton, rename all the bones, fix the scale,
-export, check the result - and you do it again every time you add another animation.
+opposite: **one file** with the character and all of its animations inside. Getting from
+one to the other means editing those downloads in Blender, and that is slow, fiddly work,
+especially if Blender is not a tool you use every day: import each file, find the one
+holding the mesh, get every animation onto a single skeleton, rename all the bones, fix the
+scale, export, check the result. Then you do it again every time you add another animation.
 
 This tool does the whole thing for you, in one command:
 
@@ -50,28 +51,10 @@ the finished animations rendered out for you to check:
 Nothing is written unless the rebuilt animation matches the source within the tolerance -
 by default **0.1 mm**, on every bone of every frame.
 
-### The part that quietly goes wrong
-
-Most of the merge is tedious rather than difficult. One part is genuinely difficult, and it
-is the reason this tool re-solves the animation instead of copying it.
-
-The files do not always agree on the character's **rest pose** - the neutral pose every
-animation is measured against. Blender stores animation as *changes relative to rest*, so
-moving an action from one file to another silently adds the difference between the two rest
-poses to every frame. The legs and torso still look plausible; the arms and hands twist.
-
-| Channels copied across | Re-solved by easy-mixamo |
-|---|---|
-| ![Twisted arm](docs/images/arm-twisted.png) | ![Correct arm](docs/images/arm-correct.png) |
-
-Plenty of Mixamo sets merge cleanly and never show this. The problem is that you cannot
-tell which kind you have by looking, and when it does happen you usually notice long after
-import. So this tool never copies animation data across at all: it watches where every bone
-actually is in world space, frame by frame, then poses the target skeleton to land in the
-same places. Whether the rest poses agree stops mattering.
-
-In the example above the two files' rest poses were **3.54 m** apart. After rebuilding,
-every bone on every frame lands within **0.007 mm** of the original.
+The same approach covers a rarer case too. If the character and the animation files do not
+share a rest pose, copying the animation across by hand twists the arms and hands. The build
+never copies animation data between files: it matches where every bone is in world space,
+frame by frame, so the hands come out the way they look in the source animation.
 
 ---
 
@@ -129,8 +112,8 @@ it afterwards.
 | Animations you want to drive from code | tick **In Place** |
 
 The one rule that people trip over: download the animations **while your character is
-selected** in Mixamo. Animations taken from a different character have different bone
-lengths, and this tool will refuse to build rather than produce something subtly wrong.
+selected** in Mixamo. Animations taken from a different character have different
+proportions, and this tool will refuse to build rather than produce something subtly wrong.
 That case needs real retargeting, which is a different job.
 
 Forgot to tick **In Place**? It can be stripped afterwards, no need to download again.
@@ -177,8 +160,8 @@ setting is the height.
 
 - **Fixed height** - Mixamo characters are around 4.6 m tall in Blender units. Set 1.75
   and the character comes out human-sized, which saves you fighting scale in Godot.
-- **Rest pose** - leave it on *auto*. This is what makes the animations and the skeleton
-  agree; see [What `--rest` actually does](#what---rest-actually-does).
+- **Rest pose** - leave it on *auto*; see
+  [What `--rest` actually does](#what---rest-actually-does).
 - **Tolerance** - how far a bone is allowed to drift before the build is rejected. The
   default is 0.1 mm.
 
@@ -223,16 +206,13 @@ python easymixamo.py all --target-height 1.75 --in-place "Crouched Walking"
 ```
 
 **Always run `inspect` first on a new set of files.** It tells you which file is the
-skinned one, whether the skeletons match, and how far apart the rest poses are - before
-anything is written:
+skinned one and whether every animation comes from the same character - before anything is
+written:
 
 ```
 bone PROPORTIONS (reference: 'Walking.fbx')  -> is it the same skeleton?
   (joint-to-parent-joint distances; leaf 'tip' bones are ignored, Mixamo re-derives them)
   Crouched Walking.fbx     max diff 0.001% (LeftHand)  SAME SKELETON
-
-REST POSE (reference: 'Walking.fbx')  -> can actions be moved across directly?
-  Crouched Walking.fbx     max diff   3.5356 m (RightHandIndex4)  DIFFERENT -> copying channels would twist the arms and hands
 ```
 
 Every step prints `OK` or `FAILED` and returns a matching exit code, so this drops into a
@@ -265,8 +245,7 @@ D:\GameProject\assets\hero\
 
 ![The rest pose](docs/images/rest-pose.png)
 
-The rest pose of the finished character. This is what Godot's Skeleton3D will show, and it
-now matches the direction the animations were authored in.
+The rest pose of the finished character. This is what Godot's Skeleton3D will show.
 
 A few things to know once it is in Godot:
 
@@ -303,14 +282,10 @@ file name is used.
 
 ### What `--rest` actually does
 
-The skinned file's bind pose often does not face the same way as the animations. `--rest
-auto` rebinds the mesh onto the pose the animations were authored against, which means
-Skeleton3D faces the right way, BoneAttachment3D behaves, and Godot's humanoid retargeting
-works. Use `--rest bind` only if you specifically need the original bind pose left alone.
-
-| Same animation, channels copied across | Rebuilt with `--rest auto` |
-|---|---|
-| ![Twisted pose](docs/images/pose-twisted.png) | ![Correct pose](docs/images/pose-correct.png) |
+`--rest auto` binds the mesh to the rest pose of the animation files, so the skeleton in the
+GLB rests in the same pose the animations were exported with. `--rest bind` keeps the
+skinned file's original bind pose instead. Use it if you need that pose, or when a mesh has
+shape keys (see pitfall 8).
 
 ---
 
@@ -324,7 +299,6 @@ works. Use `--rest bind` only if you specifically need the original bind pose le
 | `no FBX contains a mesh` | The character was downloaded **Without Skin**. Download it again With Skin |
 | `<file> contains no action` | That file has no animation in it |
 | `animation '<name>' never moves any bone` | The animation really is empty. Check what you downloaded |
-| Hands inverted in Godot | A rest pose mismatch. Run `inspect`, and make sure nothing else in your pipeline is copying animation channels |
 | Character enormous or tiny | That is Mixamo's scale. Use `--target-height 1.75`, or set Root Scale in Godot |
 | Blender not found | Set the `BLENDER` environment variable, or pass `--blender <path>`. `python easymixamo.py doctor` shows what was detected |
 
@@ -352,7 +326,7 @@ blender --factory-startup -b --python <script.py> -- <arguments>
 | `gui.py` | The app itself (tkinter) |
 | `easymixamo.py` | Command line front end, cross platform |
 | `blender_locator.py` | Finds Blender on Windows, macOS and Linux |
-| `inspect_fbx.py` | Pre-flight check and rest pose comparison |
+| `inspect_fbx.py` | Pre-flight check: which file is skinned, whether the skeletons match |
 | `build_character.py` | The real work: merge, re-solve, self-verify, export |
 | `verify_glb.py` | Checks the finished GLB independently (exit code 1 on a problem) |
 | `render_preview.py` | The preview stills |
@@ -367,22 +341,19 @@ in a clean scene, as a second opinion.
 Every one of these caused a real bug here. If you are writing something similar, this is
 the part worth reading.
 
-1. **Rest pose mismatch.** The reason this tool re-solves poses instead of copying
-   channels. Matching bone *names* is not enough; the rest *poses* have to be compared too.
-
-2. **Captured matrices carry the object scale.** The 3x3 part of `arm.matrix_world @
+1. **Captured matrices carry the object scale.** The 3x3 part of `arm.matrix_world @
    pb.matrix` has the FBX's 0.01 unit scale baked in, and it is not cancelled when the
    object matrix later becomes identity. Divide it out at capture time or it leaks into
    the solver as metres of error.
 
-3. **Use one coordinate space.** Capture everything first, then convert centimetres to
-   metres, then solve. Changing the object matrix in between walks you into pitfall 2.
+2. **Use one coordinate space.** Capture everything first, then convert centimetres to
+   metres, then solve. Changing the object matrix in between walks you into pitfall 1.
 
-4. **Never use `Armature.data.transform()`.** It changes rest data while the evaluated pose
+3. **Never use `Armature.data.transform()`.** It changes rest data while the evaluated pose
    goes stale, so what you measure is relative to the old rest.
    `bpy.ops.object.transform_apply()` does the right thing.
 
-5. **Blender 4.4+ slotted actions.** `animation_data.action = act` is not enough any more;
+4. **Blender 4.4+ slotted actions.** `animation_data.action = act` is not enough any more;
    the `action_slot` has to be assigned too. Without it the action drives nothing, and you
    end up measuring the rest pose without noticing:
    ```python
@@ -391,40 +362,40 @@ the part worth reading.
        ad.action_slot = act.slots[0]
    ```
 
-6. **Renaming bones detaches animation.** Blender fixes vertex groups automatically, but it
+5. **Renaming bones detaches animation.** Blender fixes vertex groups automatically, but it
    only repairs the animation channels of the action that is *assigned at that moment*. The
    skinned file's own animation therefore has to be sampled **before** the `mixamorig:`
    prefix is stripped - otherwise a character downloaded With Skin together with an
    animation arrives in Godot with that animation silently empty.
 
-7. **Do not assume the alpha channel, measure it.** Mixamo wires the diffuse texture into
+6. **Do not assume the alpha channel, measure it.** Mixamo wires the diffuse texture into
    the alpha input as well. If the texture is fully opaque, that link still makes the GLB
    `alphaMode: BLEND`, and Godot draws the character in the transparent pass. Measure the
    pixels and drop the link when there is no real transparency.
 
-8. **The `glTF_not_exported` artefact.** Blender's glTF *importer* adds an Icosphere to the
+7. **The `glTF_not_exported` artefact.** Blender's glTF *importer* adds an Icosphere to the
    scene in a `glTF_not_exported` collection. It is not in the file and Godot never sees
    it, but a verification script will count it as a mesh unless it filters it out.
 
-9. **The rest pose cannot be changed on meshes with shape keys.** `modifier_apply` refuses.
+8. **The rest pose cannot be changed on meshes with shape keys.** `modifier_apply` refuses.
    The build detects this and tells you; carry on with `--rest bind`.
 
-10. **"Is this animation empty?" cannot be answered from the root bone.** An in-place
-    animation keeps its root still on purpose. Sample every bone, over several frames - a
-    cyclic motion can return to its starting pose exactly at the midpoint.
+9. **"Is this animation empty?" cannot be answered from the root bone.** An in-place
+   animation keeps its root still on purpose. Sample every bone, over several frames - a
+   cyclic motion can return to its starting pose exactly at the midpoint.
 
-11. **Action names are not filenames.** Straight out of an FBX they look like
+10. **Action names are not filenames.** Straight out of an FBX they look like
     `Armature|mixamo.com|Base Layer`, and `|` and `:` are not legal in filenames on
     Windows.
 
-12. **A connected bone ignores its location channel.** `use_connect` welds a bone's head to
+11. **A connected bone ignores its location channel.** `use_connect` welds a bone's head to
     its parent's tail, so Blender simply drops whatever you write to `pose_bone.location`.
     Mixamo exports 15-20 connected bones, and the animation rig's joints sit a fraction of
     a millimetre away from the skinned rig's - enough that the solver could never quite
     land on the target and the build failed its own 0.1 mm check. Clear `use_connect` on
     every bone before solving. Nothing moves, and glTF has no notion of a connected bone.
 
-13. **Do not compare skeletons with `bone.length`.** Mixamo's leaf bones
+12. **Do not compare skeletons with `bone.length`.** Mixamo's leaf bones
     (`LeftHandIndex4`, `HeadTop_End`, `RightToeBase_End`) are tip markers whose position is
     re-derived on every download; between two files of the *same* character they can differ
     by 50%, and because a leaf's head is its parent's tail, one wandering marker fails two

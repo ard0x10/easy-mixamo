@@ -646,23 +646,23 @@ class App(tk.Tk):
 
         h("How to use it")
         p("1. FBX folder: select the folder holding this character's FBX files.")
-        p("2. Inspect: shows which file is the skinned one, whether the bone sets match, "
-          "and how far apart the rest poses are. Run it once before building.")
+        p("2. Inspect: shows which file is the skinned one and whether every animation "
+          "comes from the same character. Run it once before building.")
         p("3. Build: writes a single Character.glb. It verifies itself; if the deviation "
           "exceeds the tolerance it fails instead of writing a broken file.")
         p("4. Verify: checks the generated GLB independently (raw glTF + reload).")
         p("5. Preview: renders the rest pose, frames from every animation, and a hand "
           "close-up.")
-        d("Always look at the rest pose shot and the hand close-up - a rest pose mismatch "
-          "shows up there before anywhere else.")
+        d("Look at the stills before importing into Godot - anything that went wrong is "
+          "visible there in a second.")
 
-        h("Why this tool? (what makes copying channels break)")
-        p("On Mixamo the skinned file and the animation files do not necessarily share "
-          "the same rest (bind) pose. Blender stores animation channels relative to rest, "
-          "so moving an action to a different rig silently corrupts it: the torso looks "
-          "plausible while the arms and hands twist. This tool never copies channels; it "
-          "samples the bone matrices in a common world space frame by frame and solves "
-          "the target rig's pose.")
+        h("Why this tool?")
+        p("Mixamo gives you the character and every animation as separate FBX files. "
+          "Merging them in Blender by hand means importing each file, finding the mesh, "
+          "putting every animation on one skeleton, renaming the bones, fixing the scale "
+          "and exporting, and doing it again for every new animation. This tool does "
+          "those steps for you and checks the result against the source files before it "
+          "writes anything.")
 
         h("On the Godot side")
         p("Scale:       if you did not use a fixed height, set Root Scale on the Import "
