@@ -227,7 +227,8 @@ skinned one, whether the skeletons match, and how far apart the rest poses are -
 anything is written:
 
 ```
-bone LENGTHS (reference: 'Walking.fbx')  -> is it the same skeleton?
+bone PROPORTIONS (reference: 'Walking.fbx')  -> is it the same skeleton?
+  (joint-to-parent-joint distances; leaf 'tip' bones are ignored, Mixamo re-derives them)
   Crouched Walking.fbx     max diff 0.001% (LeftHand)  SAME SKELETON
 
 REST POSE (reference: 'Walking.fbx')  -> can actions be moved across directly?
@@ -317,7 +318,7 @@ works. Use `--rest bind` only if you specifically need the original bind pose le
 
 | Message or symptom | What it means |
 |---|---|
-| `bone lengths differ from the skinned rig by X%` | Those animations came from a different Mixamo character. Download them again with your character selected |
+| `bone proportions differ from the skinned rig by X%` | Those animations came from a different Mixamo character. Download them again with your character selected |
 | `these bones of the skinned rig are missing: [...]` | Same cause - the animation file has a different skeleton |
 | `baked animation does not match the source` | Verification did its job and nothing was written. Please open an issue |
 | `no FBX contains a mesh` | The character was downloaded **Without Skin**. Download it again With Skin |
@@ -415,6 +416,20 @@ the part worth reading.
 11. **Action names are not filenames.** Straight out of an FBX they look like
     `Armature|mixamo.com|Base Layer`, and `|` and `:` are not legal in filenames on
     Windows.
+
+12. **A connected bone ignores its location channel.** `use_connect` welds a bone's head to
+    its parent's tail, so Blender simply drops whatever you write to `pose_bone.location`.
+    Mixamo exports 15-20 connected bones, and the animation rig's joints sit a fraction of
+    a millimetre away from the skinned rig's - enough that the solver could never quite
+    land on the target and the build failed its own 0.1 mm check. Clear `use_connect` on
+    every bone before solving. Nothing moves, and glTF has no notion of a connected bone.
+
+13. **Do not compare skeletons with `bone.length`.** Mixamo's leaf bones
+    (`LeftHandIndex4`, `HeadTop_End`, `RightToeBase_End`) are tip markers whose position is
+    re-derived on every download; between two files of the *same* character they can differ
+    by 50%, and because a leaf's head is its parent's tail, one wandering marker fails two
+    bones at once. Compare joint-to-parent-joint distances - the character's proportions -
+    and skip leaf bones, which have no children and therefore deform nothing.
 
 ---
 

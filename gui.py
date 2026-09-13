@@ -639,7 +639,7 @@ class App(tk.Tk):
         p("Every animation:    FBX Binary (.fbx), Without Skin, 30 fps, "
           "keyframe reduction: none")
         d("Download the animations WITH THAT CHARACTER SELECTED. If they come from a "
-          "different character the bone lengths will not match and this tool refuses to "
+          "different character the proportions will not match and this tool refuses to "
           "build (that would need real retargeting).")
         d("Forgot to tick 'In Place'? No problem: tick the 'In place' box for that "
           "animation on the Files tab.")
@@ -675,7 +675,7 @@ class App(tk.Tk):
         p("Foot height: the Verify step tells you whether the feet sit at z=0.")
 
         h("Common errors")
-        t.insert("end", "bone lengths differ ...\n", "b")
+        t.insert("end", "bone proportions differ ...\n", "b")
         d("  The animations came from a different character. Download them again from "
           "Mixamo with the same character selected.")
         t.insert("end", "no FBX contains a mesh\n", "b")

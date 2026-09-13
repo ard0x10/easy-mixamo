@@ -45,7 +45,7 @@ def read(path):
                         if i.name != 'Render Result'],
                 actions=[(a.name, int(a.frame_range[0]), int(a.frame_range[1]))
                          for a in bpy.data.actions],
-                rest=None, lens=None, scale=None, roots=None, prefixes=None, connected=0)
+                rest=None, prop=None, scale=None, roots=None, prefixes=None, connected=0)
     if arms:
         a = arms[0]
         info["scale"] = tuple(round(v, 6) for v in a.matrix_world.to_scale())
@@ -56,7 +56,14 @@ def read(path):
         mw = a.matrix_world
         info["rest"] = {strip(b.name): (mw @ b.matrix_local).translation.copy()
                         for b in a.data.bones}
-        info["lens"] = {strip(b.name): b.length for b in a.data.bones}
+        # Distance from each joint to its parent joint - the rig's PROPORTIONS, and the
+        # measure build_character.py uses. bone.length would be wrong here: Mixamo's leaf
+        # bones ('LeftHandIndex4', 'HeadTop_End') are tip markers re-derived on every
+        # download, so they differ by tens of percent between two files of the same
+        # character while nothing that deforms has moved. Leaves are skipped.
+        head = {b.name: (mw @ b.matrix_local).translation for b in a.data.bones}
+        info["prop"] = {strip(b.name): (head[b.name] - head[b.parent.name]).length
+                        for b in a.data.bones if b.parent is not None and b.children}
         info["bones"] = [strip(b.name) for b in a.data.bones]
     return info
 
@@ -127,15 +134,17 @@ def main():
         if extra:
             log(f"      extra   : {sorted(extra)}  (ignored during the build)")
 
-    log(f"\nbone LENGTHS (reference: '{base}')  -> is it the same skeleton?")
+    log(f"\nbone PROPORTIONS (reference: '{base}')  -> is it the same skeleton?")
+    log("  (joint-to-parent-joint distances; leaf 'tip' bones are ignored, Mixamo "
+        "re-derives them)")
     for f in rigged:
         if f == base:
             continue
-        common = bb & set(data[f]["bones"])
+        common = set(data[base]["prop"]) & set(data[f]["prop"])
         worst, wb = 0.0, None
         for n in common:
-            ref = max(data[base]["lens"][n], data[f]["lens"][n], 1e-9)
-            r = abs(data[base]["lens"][n] - data[f]["lens"][n]) / ref
+            a_, b_ = data[base]["prop"][n], data[f]["prop"][n]
+            r = abs(a_ - b_) / max(a_, b_, 1e-9)
             if r > worst:
                 worst, wb = r, n
         ok = "SAME SKELETON" if worst <= 0.01 else "DIFFERENT SKELETON -> needs real retargeting"

@@ -114,6 +114,55 @@ def import_fbx(path):
     return [o for o in bpy.context.scene.objects if o not in before]
 
 
+def proportions(arm, name_map=sanitize):
+    """Distance from every joint to its parent joint, in metres.
+
+    This is what has to match between the skinned rig and an animation rig: the
+    character's PROPORTIONS. bone.length is not usable for that test. Mixamo's leaf
+    bones ('LeftHandIndex4', 'HeadTop_End', 'RightToe_End') are tip markers whose
+    position is re-derived on every download, so their length swings by tens of
+    percent between two files of the SAME character while nothing that deforms has
+    moved - and a leaf's tail is its parent's length, so one wandering tip marker
+    used to fail two bones at once. Leaf bones are skipped here (they carry a rigid
+    transform and no children, so where their tip sits changes nothing), and so is
+    the root, which has no parent to measure against.
+    """
+    mw = arm.matrix_world
+    head = {b.name: (mw @ b.matrix_local).translation for b in arm.data.bones}
+    return {name_map(b.name): (head[b.name] - head[b.parent.name]).length
+            for b in arm.data.bones if b.parent is not None and b.children}
+
+
+def disconnect_bones(arm):
+    """Clear use_connect on every bone. Returns how many were connected.
+
+    A connected bone's head is welded to its parent's tail, and Blender therefore
+    IGNORES its pose location channel. The solver needs that channel: the animation
+    rig's joints sit a fraction of a millimetre away from the skinned rig's, and with
+    location locked the pose can never land exactly on the target - the rest-pose
+    solve came out around 0.14 mm off and tripped --tolerance. Disconnecting moves
+    nothing (heads keep their rest position) and glTF has no notion of a connected
+    bone, so this is invisible in the export.
+    """
+    n = sum(1 for b in arm.data.bones if b.use_connect)
+    if not n:
+        return 0
+    before = {b.name: (arm.matrix_world @ b.matrix_local).translation.copy()
+              for b in arm.data.bones}
+    bpy.ops.object.select_all(action='DESELECT')
+    arm.select_set(True)
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode='EDIT')
+    for eb in arm.data.edit_bones:
+        eb.use_connect = False
+    bpy.ops.object.mode_set(mode='OBJECT')
+    moved = max((before[b.name] - (arm.matrix_world @ b.matrix_local).translation).length
+                for b in arm.data.bones)
+    if moved > 1e-9:
+        raise BuildError(f"disconnecting the bones moved the rest pose by {moved} m")
+    return n
+
+
 def capture(arm, act, frames, name_map=sanitize):
     """Sample bone matrices in a COMMON space: metres, Z-up, orthonormal 3x3.
 
@@ -317,8 +366,12 @@ def main():
                 raise BuildError(f"unmatched vertex groups on '{m.name}': {dangling}")
         log(f"bone names sanitized ({sum(1 for a, b in pending.items() if a != b)} changed)")
 
+    n_conn = disconnect_bones(arm)
+    if n_conn:
+        log(f"{n_conn} connected bone(s) detached so the solver can key their location")
+
     BONES = {b.name for b in arm.data.bones}
-    LENS = {b.name: b.length for b in arm.data.bones}
+    PROP = proportions(arm, name_map)
     OBJ_MW = arm.matrix_world.copy()
 
     roots = [b.name for b in arm.data.bones if b.parent is None]
@@ -345,21 +398,21 @@ def main():
         if s_names - BONES:
             log(f"  note: {fname} has extra bones, ignoring: {sorted(s_names - BONES)}")
 
-        # Same skeleton? If bone LENGTHS do not match this is a real retargeting job,
-        # which is not what this script does.
+        # Same character? If the PROPORTIONS do not match, the rest pose of this file
+        # cannot be pushed onto the skinned mesh without tearing it apart: that is a
+        # real retargeting job, which is not what this script does.
+        s_prop = proportions(s_arm, name_map)
         worst_rel, worst_bone = 0.0, None
-        for b in s_arm.data.bones:
-            n = name_map(b.name)
-            if n in LENS:
-                ref = max(LENS[n], b.length, 1e-9)
-                r = abs(b.length - LENS[n]) / ref
+        for n, d in s_prop.items():
+            if n in PROP:
+                r = abs(d - PROP[n]) / max(PROP[n], d, 1e-9)
                 if r > worst_rel:
                     worst_rel, worst_bone = r, n
         if worst_rel > 0.01:
             raise BuildError(
-                f"{fname}: bone lengths differ from the skinned rig by {worst_rel*100:.1f}% "
-                f"('{worst_bone}'). This is a different skeleton - it needs real "
-                f"retargeting, which this script does not do.")
+                f"{fname}: bone proportions differ from the skinned rig by "
+                f"{worst_rel*100:.1f}% ('{worst_bone}'). This is a different skeleton - "
+                f"it needs real retargeting, which this script does not do.")
 
         if s_arm.matrix_world != OBJ_MW:
             log(f"  WARNING: {fname} has a different object matrix than the skinned file "
